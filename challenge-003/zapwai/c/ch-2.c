@@ -20,8 +20,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  int N = atoi(argv[1]); // Convert the command line argument to integer
-
+  int N = atoi(argv[1]);
   int **m = malloc(N * sizeof(int*)); // Allocate memory for 2D array
 
   for (int i = 0; i < N; i++) {

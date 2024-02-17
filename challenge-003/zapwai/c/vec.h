@@ -5,15 +5,6 @@ typedef struct vector {
   int* data;			/* integer data */
 } vec;
 
-/* first example, remove this */
-void store(struct vector* v, int idx, int value) {
-  if (v->size < idx) {
-    v->size = idx*2;
-    v->data = realloc(v->data, sizeof(int)*v->size);
-  }
-  v->data[idx] = value;
-}
-
 void init_vec(struct vector* v) {
   v->size = 0;
   v->cap = 10;
