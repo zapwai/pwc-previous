@@ -7,7 +7,7 @@
 #define max_length 50
 #define thou 1000
 #define rows_in_file 50000	/* using a custom word file w 38k words */
-#define limit 4			/* max chain length is twice limit */
+#define limit 6			/* max chain length is twice limit */
 
 char** read_file(char* filename, int* num_words) {
   FILE* fp = fopen(filename, "r");
@@ -36,18 +36,12 @@ void chomp(char** words) {
   }
 }
 
-void push(char** list, char* item) {
-  int i = 0;
-  if (list[i] != NULL)
-    i++;
+void push(char** list, char* item, int i) {
   list[i] = malloc(max_length * sizeof(char));
   strcpy(list[i], item);
 }
 
-void unshift(char** list, char* item) {
-  int len = 0;
-  if (list[len] != NULL)
-    len++;
+void unshift(char** list, char* item, int len) {
   list[len] = malloc(max_length * sizeof(char));
   for (int i = len; i > 0; i--)
     strcpy(list[i], list[i - 1]);
@@ -99,7 +93,7 @@ void check(int m, int n, char*** A, char*** B, int* Acnt, int* Bcnt, char** cent
     ans[i] = malloc(max_length * sizeof(char));
   int k = 0;
   for (int i = 0; i < m; i++) 
-    for (int j = 0; j < m; j++) {
+    for (int j = 0; j < n; j++) {
       int hits = 0;
       char** common = intersection(A[i], B[j], Acnt[i], Bcnt[j], &hits);
       for (int l = 0; l < hits; l++) {
@@ -206,12 +200,12 @@ void clean_cycle(char** a_uniq, char** b_uniq, char** anew, char** bnew) {
   free(bnew);
 }
 
-void cleanup(char** list, char*** A, char*** B, char** center, char** words, int words_len) {
-  for (int j = 0; j < thou; j++){
+void cleanup(char** list, char*** A, char*** B, char** center, char** words, int words_len, int list_len) {
+  for (int j = 0; j < list_len; j++)
     free(list[j]);
-    free(center[j]);
-  }
   free(list);
+  for (int j = 0; j < thou; j++)
+    free(center[j]);
   free(center);  
   for (int i = 0; i < limit; i++) {
     for (int j = 0; j < thou; j++) {
@@ -231,7 +225,6 @@ void cleanup(char** list, char*** A, char*** B, char** center, char** words, int
 
 void proc(char** dict, char* input1, char* input2) {
   printf("Input: %s to %s\n", input1, input2);
-
   
   if (strlen(input1) != strlen(input2)) {
     printf("Lengths are not equal.\n");
@@ -249,20 +242,10 @@ void proc(char** dict, char* input1, char* input2) {
 
   int words_len;
   char** words = grep_for_length(strlen(input1), dict, &words_len);
+
   /* A[1] contains words a distance 1 from input1, A[2] dist 2, etc. */
-  
   char*** A = neighbors_container();
   char*** B = neighbors_container();
-  /* char*** A = malloc(limit * sizeof(char**));   */
-  /* char*** B = malloc(limit * sizeof(char**)); */
-  /*   for (int i = 0; i < limit; i++) { */
-  /*     A[i] = malloc(thou * sizeof(char*)); */
-  /*     B[i] = malloc(thou * sizeof(char*)); */
-  /*     for (int j = 0; j < thou; j++) { */
-  /*       A[i][j] = malloc(max_length * sizeof(char)); */
-  /*       B[i][j] = malloc(max_length * sizeof(char)); */
-  /*     } */
-  /*   } */
   A[0][0] = malloc(max_length * sizeof(char));
   B[0][0] = malloc(max_length * sizeof(char));
   strcpy(A[0][0], input1);
@@ -279,7 +262,7 @@ void proc(char** dict, char* input1, char* input2) {
   char** center = malloc(thou * sizeof(char*)); 
   for (int i = 0; i < thou; i++)
     center[i] = malloc(max_length * sizeof(char));
-
+  
   do {
     char** anew = malloc(thou *sizeof(char*));
     char** bnew = malloc(thou *sizeof(char*));
@@ -301,6 +284,7 @@ void proc(char** dict, char* input1, char* input2) {
       free(temp);
     }
     int anew_length = k;
+
     k = 0;
     for (int i = 0; i < Bcnt[lvl]; i++) {
       int temp_length;
@@ -314,66 +298,72 @@ void proc(char** dict, char* input1, char* input2) {
       free(temp);
     }
     int bnew_length = k;
-    
+
     int a_uniq_len = 0;
     int b_uniq_len = 0;
     char** a_uniq = unique(anew, anew_length, &a_uniq_len);
     char** b_uniq = unique(bnew, bnew_length, &b_uniq_len);
-    printf("wtf\n");
-    int i = 0;
 
-    for (i = 0; i < a_uniq_len; i++)
-      push(A[lvl+1], a_uniq[i]);
-    Acnt[lvl + 1] = i;
-    printf("pre\n");
-    /* center = check(lvl + 1, lvl, A, B);  or not...     */
-    i = 0;
-    for (i = 0; i < b_uniq_len; i++)
-      push(B[lvl+1], b_uniq[i]);
-    Bcnt[lvl + 1] = i;
-    printf("post\n");
+    for (int i = 0; i < a_uniq_len; i++) 
+      push(A[lvl+1], a_uniq[i], i);
+    Acnt[lvl + 1] = a_uniq_len;
+
+    check(lvl + 1, lvl, A, B, Acnt, Bcnt, center);
+    
+    for (int i = 0; i < b_uniq_len; i++)
+      push(B[lvl+1], b_uniq[i], i);
+    Bcnt[lvl + 1] = b_uniq_len;
+
     clean_cycle(a_uniq, b_uniq, anew, bnew);
     lvl++;
-
+    
     check(lvl, lvl, A, B, Acnt, Bcnt, center);
     
     if (strlen(center[0]) > 0)
       break;
 
   } while (lvl < limit);
-  
-  printf("lvl: %d\n", lvl);
+  printf("lvl: %d", lvl);
   if (lvl == limit) {
     printf("Output: ()\n");
     return;
   }
-  /* printf("%s", center[0]); */
+  printf("wow\n");
   int counter = lvl - 1;
-  char** list = malloc(thou * sizeof(char*));
-  for (int i = 0; i < thou; i++) {
-    list[i] = malloc(max_length * sizeof(char));
-  }
-  
   char* x = neighbor(center[0], A[counter]);
   char* y = neighbor(center[0], B[counter]);
+  char** list = malloc(thou * sizeof(char*));
+  int list_len = 0;
   if (y != NULL) {
     do {
-      unshift(list, x);
-      push(list, y);
+      printf("x: %s\n", x);
+      unshift(list, x, list_len);
+      list_len++;
+      printf("y: %s\n", y);
+      push(list, y, list_len);
+      list_len++;
       counter--;
       x = neighbor(x, A[counter]);
       y = neighbor(y, B[counter]);
-    } while (counter != 0);
+    } while (counter > 0);
   }
-  unshift(list, x);
-  push(list, y);
+  if (x != NULL) {
+    printf("x: %s\n", x);
+    unshift(list, x, list_len);
+    list_len++;
+  }
+  if (y != NULL) {
+    printf("y: %s\n", y);
+    push(list, y, list_len);
+    list_len++;
+  }
   
   printf("Output: ");
-  for (int i = 0; list[i] != NULL; i++)
+  for (int i = 0; i < list_len; i++)
     printf("%s ", list[i]);
   printf("\n");
   
-  cleanup(list, A, B, center, words, words_len);
+  cleanup(list, A, B, center, words, words_len, list_len);
 }
 
 int main(int argc, char* argv[]) {
@@ -383,8 +373,8 @@ int main(int argc, char* argv[]) {
   dict = read_file(filename, &dict_len);
   chomp(dict);
 
-  char* input1 = "cold";
-  char* input2 = "warm";
+  char* input1 = "pour";
+  char* input2 = "made";
   proc(dict, input1, input2);
 
   /* char* l1[] = {"pour", "cold", "peer", "knife", "prince"}; */
