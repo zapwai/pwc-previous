@@ -40,6 +40,7 @@ void push(char** list, char* item) {
   int i = 0;
   if (list[i] != NULL)
     i++;
+  list[i] = malloc(max_length * sizeof(char));
   strcpy(list[i], item);
 }
 
@@ -47,28 +48,30 @@ void unshift(char** list, char* item) {
   int len = 0;
   if (list[len] != NULL)
     len++;
+  list[len] = malloc(max_length * sizeof(char));
   for (int i = len; i > 0; i--)
     strcpy(list[i], list[i - 1]);
   strcpy(list[0], item);
 }
 
-char** unique(char** words) {
+char** unique(char** words, int words_length, int* uniq_len) {
   char** subset = malloc(thou * sizeof(char*));
-  for (int i = 0; i < thou; i++) { subset[i] = NULL; }
+  for (int i = 0; i < thou; i++)
+    subset[i] = malloc(max_length * sizeof(char));
   int k = 0;
-  for (int i = 0; words[i] != NULL; i++) {
+  for (int i = 0; i < words_length; i++) {
     bool flag = false;
-    for (int j = 0; subset[j] != NULL; j++)
+    for (int j = 0; j < k; j++)
       if (strcmp(words[i], subset[j]) == 0) {
 	flag = true;
 	break;
       }
     if (!flag) {
-      subset[k] = malloc((1+strlen(words[i])) * sizeof(char));
       strcpy(subset[k], words[i]);
       k++;
     }
   }
+  *uniq_len = k;
   return subset;
 }
 
@@ -95,7 +98,7 @@ void check(int m, int n, char*** A, char*** B, int* Acnt, int* Bcnt, char** cent
   for (int i = 0; i < thou; i++)
     ans[i] = malloc(max_length * sizeof(char));
   int k = 0;
-  for (int i = 0; i < m; i++) {
+  for (int i = 0; i < m; i++) 
     for (int j = 0; j < m; j++) {
       int hits = 0;
       char** common = intersection(A[i], B[j], Acnt[i], Bcnt[j], &hits);
@@ -107,10 +110,12 @@ void check(int m, int n, char*** A, char*** B, int* Acnt, int* Bcnt, char** cent
 	free(common[l]);
       free(common);
     }
-  }
-  for (int i = 0; i < k; i++) {
+
+  for (int i = 0; i < k; i++) 
     strcpy(center[i], ans[i]);
-  }
+  for (int i = 0; i < thou; i++)
+    free(ans[i]);
+  free(ans);
 }
 
 char** expand(char* word, char** words, int* length) {
@@ -182,8 +187,8 @@ char*** neighbors_container() {
   char*** A = malloc(limit * sizeof(char**));
   for (int i = 0; i < limit; i++) {
     A[i] = malloc(thou * sizeof(char*));
-    for (int j = 0; j < thou; j++)
-      A[i][j] = malloc(max_length * sizeof(char));
+    /* for (int j = 0; j < thou; j++) */
+    /*   A[i][j] = malloc(max_length * sizeof(char)); */
   }
   return A;
 }
@@ -226,6 +231,7 @@ void cleanup(char** list, char*** A, char*** B, char** center, char** words, int
 
 void proc(char** dict, char* input1, char* input2) {
   printf("Input: %s to %s\n", input1, input2);
+
   
   if (strlen(input1) != strlen(input2)) {
     printf("Lengths are not equal.\n");
@@ -257,10 +263,11 @@ void proc(char** dict, char* input1, char* input2) {
   /*       B[i][j] = malloc(max_length * sizeof(char)); */
   /*     } */
   /*   } */
-
+  A[0][0] = malloc(max_length * sizeof(char));
+  B[0][0] = malloc(max_length * sizeof(char));
   strcpy(A[0][0], input1);
   strcpy(B[0][0], input2);
-  
+
   /* these record the number of cells at each level of A or B */
   int Acnt[limit] = {};
   int Bcnt[limit] = {};
@@ -272,6 +279,7 @@ void proc(char** dict, char* input1, char* input2) {
   char** center = malloc(thou * sizeof(char*)); 
   for (int i = 0; i < thou; i++)
     center[i] = malloc(max_length * sizeof(char));
+
   do {
     char** anew = malloc(thou *sizeof(char*));
     char** bnew = malloc(thou *sizeof(char*));
@@ -292,6 +300,7 @@ void proc(char** dict, char* input1, char* input2) {
 	free(temp[l]);
       free(temp);
     }
+    int anew_length = k;
     k = 0;
     for (int i = 0; i < Bcnt[lvl]; i++) {
       int temp_length;
@@ -304,40 +313,45 @@ void proc(char** dict, char* input1, char* input2) {
 	free(temp[l]);
       free(temp);
     }
-
-    char** a_uniq = unique(anew);
-    char** b_uniq = unique(bnew);
-
+    int bnew_length = k;
+    
+    int a_uniq_len = 0;
+    int b_uniq_len = 0;
+    char** a_uniq = unique(anew, anew_length, &a_uniq_len);
+    char** b_uniq = unique(bnew, bnew_length, &b_uniq_len);
+    printf("wtf\n");
     int i = 0;
-    for (i = 0; a_uniq[i] != NULL; i++)
+
+    for (i = 0; i < a_uniq_len; i++)
       push(A[lvl+1], a_uniq[i]);
     Acnt[lvl + 1] = i;
+    printf("pre\n");
     /* center = check(lvl + 1, lvl, A, B);  or not...     */
     i = 0;
-    for (int i = 0; b_uniq[i] != NULL; i++)
+    for (i = 0; i < b_uniq_len; i++)
       push(B[lvl+1], b_uniq[i]);
     Bcnt[lvl + 1] = i;
-
+    printf("post\n");
     clean_cycle(a_uniq, b_uniq, anew, bnew);
     lvl++;
+
     check(lvl, lvl, A, B, Acnt, Bcnt, center);
-    if (strlen(center[0]) > 0) {
-      printf("EGAD\n");
+    
+    if (strlen(center[0]) > 0)
       break;
-    }
+
   } while (lvl < limit);
-  printf("made it to 329...\n");
+  
+  printf("lvl: %d\n", lvl);
   if (lvl == limit) {
     printf("Output: ()\n");
     return;
   }
-
-
+  /* printf("%s", center[0]); */
   int counter = lvl - 1;
   char** list = malloc(thou * sizeof(char*));
   for (int i = 0; i < thou; i++) {
     list[i] = malloc(max_length * sizeof(char));
-    list[i] = NULL;
   }
   
   char* x = neighbor(center[0], A[counter]);
