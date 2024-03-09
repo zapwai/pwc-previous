@@ -5,9 +5,9 @@
 #include <regex.h>
 
 #define max_length 50
-#define thou 1000
+#define thou 50000
 #define rows_in_file 50000	/* using a custom word file w 38k words */
-#define limit 6			/* max chain length is twice limit */
+#define limit 5			/* max chain length is twice limit */
 
 char** read_file(char* filename, int* num_words) {
   FILE* fp = fopen(filename, "r");
@@ -71,8 +71,6 @@ char** unique(char** words, int words_length, int* uniq_len) {
 
 char** intersection(char** list1, char** list2, int l1_len, int l2_len, int* hits) {
   char** common = malloc(thou * sizeof(char*));
-  /* for (int i = 0; i < thou; i++) */
-  /*   common[i] = malloc(max_length * sizeof(char)); */
   int k = 0;
   for (int i = 0; i < l1_len; i++) {
     for (int j = 0; j < l2_len; j++) {
@@ -181,8 +179,6 @@ char*** neighbors_container() {
   char*** A = malloc(limit * sizeof(char**));
   for (int i = 0; i < limit; i++) {
     A[i] = malloc(thou * sizeof(char*));
-    /* for (int j = 0; j < thou; j++) */
-    /*   A[i][j] = malloc(max_length * sizeof(char)); */
   }
   return A;
 }
@@ -200,7 +196,7 @@ void clean_cycle(char** a_uniq, char** b_uniq, char** anew, char** bnew) {
   free(bnew);
 }
 
-void cleanup(char** list, char*** A, char*** B, char** center, char** words, int words_len, int list_len) {
+void cleanup(char** list, char*** A, char*** B, char** center, char** words, int words_len, int list_len, int* Acnt, int* Bcnt) {
   for (int j = 0; j < list_len; j++)
     free(list[j]);
   free(list);
@@ -208,10 +204,11 @@ void cleanup(char** list, char*** A, char*** B, char** center, char** words, int
     free(center[j]);
   free(center);  
   for (int i = 0; i < limit; i++) {
-    for (int j = 0; j < thou; j++) {
+    for (int j = 0; j < Acnt[i]; j++)
       free(A[i][j]);
+    for (int j = 0; j < Bcnt[i]; j++)
       free(B[i][j]);
-    }
+
     free(A[i]);
     free(B[i]);
   }
@@ -223,23 +220,25 @@ void cleanup(char** list, char*** A, char*** B, char** center, char** words, int
   free(words);  
 }
 
-void proc(char** dict, char* input1, char* input2) {
+void proc(char** dict, int dict_len, char* input1, char* input2) {
   printf("Input: %s to %s\n", input1, input2);
-  
+
   if (strlen(input1) != strlen(input2)) {
-    printf("Lengths are not equal.\n");
+    printf("Output: ()\n");
+    printf("[Lengths are not equal.]\n");
     return;
   }
 
   int cnt = 0;
-  for (int i = 0; dict[i] != NULL; i++)
+  for (int i = 0; i < dict_len; i++)
     if ((0 == strcmp(input1, dict[i])) || (0 == strcmp(input2, dict[i])))
       cnt++;
   if (cnt < 2) {
-    printf("One of these inputs is not considered a word.\n");
+    printf("Output: ()\n");
+    printf("[One of these inputs is not considered a word.]\n");
     return;
   }
-
+  
   int words_len;
   char** words = grep_for_length(strlen(input1), dict, &words_len);
 
@@ -258,7 +257,7 @@ void proc(char** dict, char* input1, char* input2) {
   Bcnt[0] = 1;
   
   int lvl = 0;
-
+  
   char** center = malloc(thou * sizeof(char*)); 
   for (int i = 0; i < thou; i++)
     center[i] = malloc(max_length * sizeof(char));
@@ -275,6 +274,11 @@ void proc(char** dict, char* input1, char* input2) {
     for (int i = 0; i < Acnt[lvl]; i++) {
       int temp_length;
       char** temp = expand(A[lvl][i], words, &temp_length);
+      if (temp_length == 0) {
+	printf("Output: ()\n");
+	printf("[No neighboring words on %s.]\n", A[lvl][i]);
+	return;
+      }
       for (int j = 0; j < temp_length; j++) {
 	strcpy(anew[k], temp[j]);
 	k++;
@@ -285,10 +289,24 @@ void proc(char** dict, char* input1, char* input2) {
     }
     int anew_length = k;
 
+    /* Check if they're already neighbors. */
+    for (int i = 0; i < anew_length; i++) {
+      if (0 == strcmp(anew[i], input2)) {
+	printf("Output: %s %s\n", input1, input2);
+	return;
+      }
+    }
+    
     k = 0;
     for (int i = 0; i < Bcnt[lvl]; i++) {
       int temp_length;
       char** temp = expand(B[lvl][i], words, &temp_length);
+      if (temp_length == 0) {
+	printf("Output: ()\n");
+	printf("[No neighboring words on %s.]\n", B[lvl][i]);
+	return;
+      }
+      
       for (int j = 0; j < temp_length; j++) {
 	strcpy(bnew[k], temp[j]);
 	k++;
@@ -309,26 +327,25 @@ void proc(char** dict, char* input1, char* input2) {
     Acnt[lvl + 1] = a_uniq_len;
 
     check(lvl + 1, lvl, A, B, Acnt, Bcnt, center);
-    
+    if (strlen(center[0]) > 0)
+      break;    
     for (int i = 0; i < b_uniq_len; i++)
       push(B[lvl+1], b_uniq[i], i);
     Bcnt[lvl + 1] = b_uniq_len;
 
     clean_cycle(a_uniq, b_uniq, anew, bnew);
     lvl++;
-    
     check(lvl, lvl, A, B, Acnt, Bcnt, center);
-    
     if (strlen(center[0]) > 0)
       break;
-
+    
   } while (lvl < limit);
-  printf("lvl: %d", lvl);
+
   if (lvl == limit) {
     printf("Output: ()\n");
     return;
   }
-  printf("wow\n");
+
   int counter = lvl - 1;
   char* x = neighbor(center[0], A[counter]);
   char* y = neighbor(center[0], B[counter]);
@@ -336,10 +353,8 @@ void proc(char** dict, char* input1, char* input2) {
   int list_len = 0;
   if (y != NULL) {
     do {
-      printf("x: %s\n", x);
       unshift(list, x, list_len);
       list_len++;
-      printf("y: %s\n", y);
       push(list, y, list_len);
       list_len++;
       counter--;
@@ -348,12 +363,10 @@ void proc(char** dict, char* input1, char* input2) {
     } while (counter > 0);
   }
   if (x != NULL) {
-    printf("x: %s\n", x);
     unshift(list, x, list_len);
     list_len++;
   }
   if (y != NULL) {
-    printf("y: %s\n", y);
     push(list, y, list_len);
     list_len++;
   }
@@ -363,24 +376,20 @@ void proc(char** dict, char* input1, char* input2) {
     printf("%s ", list[i]);
   printf("\n");
   
-  cleanup(list, A, B, center, words, words_len, list_len);
+  cleanup(list, A, B, center, words, words_len, list_len, Acnt, Bcnt);
 }
 
 int main(int argc, char* argv[]) {
-  char** dict;
   char* filename = "words";
   int dict_len;
-  dict = read_file(filename, &dict_len);
+  char** dict = read_file(filename, &dict_len);
   chomp(dict);
 
-  char* input1 = "pour";
-  char* input2 = "made";
-  proc(dict, input1, input2);
-
-  /* char* l1[] = {"pour", "cold", "peer", "knife", "prince"}; */
-  /* char* l2[] = {"made", "warm", "norm", "dance", "prance"}; */
-  /* for (int i = 0; i < sizeof(l1)/sizeof(char*); i++) */
-  /*   proc(dict, l1[i], l2[i]); */
+  char* l1[] = {"pour", "cold", "peer", "knife", "prince"};
+  char* l2[] = {"made", "warm", "norm", "dance", "prance"};
+  int len = sizeof(l1)/sizeof(char*);
+  for (int i = 0; i < len; i++)
+    proc(dict, dict_len, l1[i], l2[i]);
 
   for (int i = 0; i < dict_len; i++)
     free(dict[i]);
